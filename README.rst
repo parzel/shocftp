@@ -1,12 +1,16 @@
-shocftp
+shocftp v0.2
 ========================================================
 
-....
+Crawl (anonymous) accessible ftps for files
 
 Features
 --------
 
-- Crawl anonymous accessible ftps for files
+- Use builtin Shodan search
+- Multiprocessing
+- Define own user/password combination
+- Define level of crawling depth
+- Auto generate download links for files
 
 Installation
 ------------
@@ -15,11 +19,10 @@ Install the shodan library
 
 .. code-block:: bash
 
-    $ pip install shodan
-    $ pip install scrapy
-
-Start the script
+    $ sudo python3 -m pip install shodan
+    
+You are ready to go
 
 .. code-block:: bash
 
-    $ ./crawler.py --results 100 --api_key XXXXX
+    $ ./crawler.py --help

@@ -1,10 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import shodan
 import sys
 import argparse
 import ftplib
 import multiprocessing
+import logging
+import datetime
 
 # CONFIG
 USER = 'anonymous'
@@ -16,84 +18,76 @@ LEVEL = 0
 WORKER = 1
 
 def CrawlPath(ftp, host_adress, path='', level=0):
+        output = ''
         if LEVEL-level==-1:
-                return
-        print level
-        # List dir, if perm error just continue
+                return output
+        #output += level
+        # List dir, if perm error handle
         try:
                 if path:
                         ftp.cwd(path)
-                        print path
+                        output += str(path) + '\n'
                 else:
-                        print '/'
+                        output += '/\n'
                 files = ftp.nlst()
-        except ftplib.all_errors, e:
-                if(e==ftplib.error_perm):
-                        print '    '+'Permission denied'
-                else:
-                        print path
-                        print '    '+'Error %s' %e
-                        print
-                return
 
-        # Print every line
+        except ftplib.all_errors as e:               
+                # Maybe is a file
+                if '550' in str(e):          
+                        if FILENAME:
+                                if FILENAME in path:
+                                        output += 'Found a match: '+'ftp://'+USER+':'+PASSWORD+'@'+host_adress+'/'+path+'\n'
+                        
+                # Some other error
+                else:
+                    output += path+': Error '+str(e)+'\n'    
+
+                return output
+
+        # output += every line
         for index, line in enumerate(files):
-                print '    '+str(line)
-        print
+                output += '    '+str(line)+'\n'
 
         # Check every line
         for index, line in enumerate(files):        
-                # If it has a dot its possibly a file
-                if not '.' in line:
-                        CrawlPath(ftp, host_adress, path+'/'+line, level+1)
-                else:
-                         # Check for search match
-                        if FILENAME:
-                                if FILENAME in line:
-                                        print '=> Found a match: '+'ftp://'+USER+':'+PASSWORD+'@'+host_adress+'/'+path+FILENAME
+                        
+                #Try to crawl anyway
+                if line != '.' and line != '..':
+                        output += CrawlPath(ftp, host_adress, path+'/'+line, level+1)
+        
+        return output                             
 
 
 def CrawlHost(result):
-        print '------------------------------------'
+        output = '------------------------------------\n\n'
         
-        # Parse Shodan result
-        
+        # Parse Shodan result  
         host_adress = result['ip_str']
         host_name = result['hostnames']
         host_os = result['os']
         host_data = result['data']
 
-        print ''
-        print 'Host: '+host_adress
+        output += 'Host: '+host_adress+'\n'
 
         if host_name:
-                print 'Name: '+host_name[0]
+                output += 'Name: '+host_name[0]+'\n'
         else:
-                print 'Name: not available'
+                output += 'Name: Not available'+'\n'
 
         if VERBOSE:
-                print 'Fingerprint:'
-                print host_data
+                output += 'Fingerprint:'+'\n'
+                output += host_data+'\n'
 
         try:
                 # Open connection
                 ftp = ftplib.FTP(host_adress, USER, PASSWORD,'',TIMEOUT)
-        except ftplib.all_errors, e:
-                print '=> Error while connecting: %s' % e
-                return
+        except ftplib.all_errors as e:
+                output += '=> Error while connecting: '+str(e)+'\n'
+                return output
         
         # Crawl Path
-        CrawlPath(ftp, host_adress)
-
-def StartWorker(index,q):
-        try:
-                while not q.empty():
-                        print 'Worker %i getting a new job...' %index
-                        myresult = q.get(0)
-                        CrawlHost(myresult)
-                        print 'Worker %i has finished!' %index
-        except KeyboardInterrupt, IOError:
-                print('Ok. Bye!')
+        output += CrawlPath(ftp, host_adress)
+        print(output)
 
 def StartShodanSearch(api_key, count_until):
         # Initialize Shodan api
@@ -105,29 +99,42 @@ def StartShodanSearch(api_key, count_until):
                 #results = api.search('port:21 230',page)
                 search_results = results['total']
 
-                #print 'Shodan query worked! %s Results found on page %i' % (search_results, page)
-                print '=> Investigating %i results' %count_until
+        except shodan.APIError as e:
+                print('=> Error: '+str(e))
+                return
+        
+        #print 'Shodan query worked! %s Results found on page %i' % (search_results, page)
+        print('=> Investigating '+str(count_until)+' results\n')
 
-                # Query information about every individual FTP server
-                q = multiprocessing.Queue()
-                for r in results['matches'][0:count_until]:
-                        q.put(r)
+        # Query information about every individual FTP server
+        q = multiprocessing.Queue()
+        for r in results['matches'][0:count_until]:
+                q.put(r)
 
-                # Start worker
-                for i in range(WORKER):
-                        p = multiprocessing.Process(target=StartWorker, args=(i,q))
-                        p.start()
-
-
-        except shodan.APIError, e:
-                print '=> Error: %s' % e
+        # Start worker
+        try:
+                pool = multiprocessing.Pool(processes=WORKER)           
+                pool.map(CrawlHost, results['matches'][0:count_until])
+                pool.close()
+                pool.join()
+                
+        except (KeyboardInterrupt, IOError):
+                print('\nCaught KeyboardInterrupt, terminating workers\n')
+                pool.terminate()
+                sys.exit()
+                
+        else:
+                print('Queue is empty. Exiting...')
+                
+                
+                                
 
 def main():
         # Globals
         global VERBOSE, USER, PASSWORD, FILENAME, LEVEL, TIMEOUT, WORKER
 
         # Instantiate the parser
-        parser = argparse.ArgumentParser(description='Crawl anonymous accessible FTP server for files. It has a built in shodan search function.')
+        parser = argparse.ArgumentParser(description='Crawl FTP server for files. It has a built in Shodan search function.')
 
         # Require Count
         parser.add_argument('-r','--results', type=int, help='The number of results you want to crawl')
@@ -136,25 +143,28 @@ def main():
         parser.add_argument('-a','--api_key', help='Your Shodan API key')
 
         # File to search for
-        parser.add_argument('-f','--file_name', help='File name you want to crawl for')
+        parser.add_argument('-f','--file_name', help='File name you want to generate download links for')
 
         # Define User
         parser.add_argument('-u','--user', help='Define a specific user, standard is anonymous')
 
         # Define Password
-        parser.add_argument('-p','--password', help='Define a specific password, standard is anonymous')
+        parser.add_argument('-p','--password', help='Define a specific password, standard is anonymous@')
 
         # Verbose
-        parser.add_argument('-v','--verbose', action='store_true', help='More output')
+        parser.add_argument('-v','--verbose', action='store_true', help='More Shodan information about each ftp server')
 
         # Level
-        parser.add_argument('-l','--level', type=int, help='How deep you will crawl')
+        parser.add_argument('-l','--level', type=int, help='How deep the crawler searches')
 
         # Timeout
         parser.add_argument('-t','--timeout', type=int, help='How many seconds until connection timeout')
 
         # Process
         parser.add_argument('-w','--worker', type=int, help='Number of Workers')
+
+        # Output
+        parser.add_argument('-o','--output', help='Output file for logging. Standard is stdout')
 
 
         args = parser.parse_args()
@@ -174,26 +184,33 @@ def main():
         if args.worker:
                 WORKER = args.worker
         VERBOSE = args.verbose
-        FILENAME = str(args.file_name)
-        
+        if args.file_name:
+                FILENAME = str(args.file_name)
 
-        print '~ shocftp v0.1 ~\n'
+        if args.output:
+                #redirect stdout
+                old_stdout = sys.stdout
+                log_file = open(args.output,"w")
+                sys.stdout = log_file
+                
+
+        print('~ shocftp v0.2 ~\n')
         if VERBOSE:
-                print 'Verbose Mode enabled!'
+                print('Verbose Mode enabled!')
         if FILENAME:
-                print '=> Looking for '+FILENAME
+                print('=> Looking for '+FILENAME)
         if LEVEL != 0:
-                print '=> Searching %i levels deep' %LEVEL
+                print('=> Searching '+str(LEVEL)+' levels deep')
         if WORKER != 1:
-                print '=> Using %i workers' %WORKER
-        print '=> Timeout is %i seconds' %TIMEOUT
-        print '=> Try to login with %s:%s' %(USER, PASSWORD)
-        print '------------------------------------\n'
+                print('=> Using '+str(WORKER)+' workers')
+        print('=> Timeout is '+str(TIMEOUT)+' seconds')
+        print('=> Try to login with '+USER+':'+PASSWORD)
+
         StartShodanSearch(args.api_key, args.results)
+
+        if args.output:
+                log_file.close()
 
 
 if __name__ == "__main__":
-    try:
         main()
-    except KeyboardInterrupt:
-        print('Ok. Bye!')
