@@ -1,7 +1,7 @@
 shocftp v0.2
 ========================================================
 
-Crawl (anonymous) accessible ftps for files
+Crawl (anonymous) accessible FTP server for files
 
 Features
 --------
@@ -20,7 +20,7 @@ Install the shodan library
 .. code-block:: bash
 
     $ sudo python3 -m pip install shodan
-    
+
 You are ready to go
 
 .. code-block:: bash

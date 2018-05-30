@@ -5,8 +5,7 @@ import sys
 import argparse
 import ftplib
 import multiprocessing
-import logging
-import datetime
+import math 
 
 # CONFIG
 USER = 'anonymous'
@@ -88,41 +87,50 @@ def CrawlHost(result):
         # Crawl Path
         output += CrawlPath(ftp, host_adress)
         print(output)
+        return output
 
 def StartShodanSearch(api_key, count_until):
         # Initialize Shodan api
         api = shodan.Shodan(api_key)
+
+        # Calc pages
+        if count_until <= 100:
+                pages = 2
+        else:
+                pages = math.ceil(count_until / 100.0)+2
+
+        print('=> Downloading '+str(count_until)+' results on '+str(pages-2)+' pages\n')
+
         # Wrap the request
-        try:
-                # Search Shodan for ftp (21) that sends 230, which is User logged in
-                results = api.search('230',0)
-                #results = api.search('port:21 230',page)
-                search_results = results['total']
+        matches = []
+        for i in range (1, pages):
+                try:
+                        # Search Shodan for ftp (21) that sends 230, which is User logged in
+                        results = api.search('230',i)
+                        matches.extend(results['matches'])
+                        results = []
 
-        except shodan.APIError as e:
-                print('=> Error: '+str(e))
-                return
-        
-        #print 'Shodan query worked! %s Results found on page %i' % (search_results, page)
-        print('=> Investigating '+str(count_until)+' results\n')
-
-        # Query information about every individual FTP server
-        q = multiprocessing.Queue()
-        for r in results['matches'][0:count_until]:
-                q.put(r)
+                except shodan.APIError as e:
+                        print('=> Error: '+str(e))
+                        break
+                
+        print('=> Succesfull for '+str(len(matches))+' results\n')
+                
+        for index, line in enumerate(matches):
+                print(str(index)+'    '+str(line['ip_str'])+'\n')
 
         # Start worker
         try:
                 pool = multiprocessing.Pool(processes=WORKER)           
-                pool.map(CrawlHost, results['matches'][0:count_until])
-                pool.close()
-                pool.join()
+                pool.map(CrawlHost, matches)
+                #pool.close()
+                #pool.join()
                 
         except (KeyboardInterrupt, IOError):
                 print('\nCaught KeyboardInterrupt, terminating workers\n')
                 pool.terminate()
                 sys.exit()
-                
+
         else:
                 print('Queue is empty. Exiting...')
                 
