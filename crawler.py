@@ -99,7 +99,7 @@ def StartShodanSearch(api_key, count_until):
         else:
                 pages = math.ceil(count_until / 100.0)+2
 
-        print('=> Downloading '+str(count_until)+' results on '+str(pages-2)+' pages\n')
+        print('=> Downloading '+str(count_until)+' results on '+str(pages-1)+' pages\n')
 
         # Wrap the request
         matches = []
