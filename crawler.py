@@ -94,10 +94,7 @@ def StartShodanSearch(api_key, count_until):
         api = shodan.Shodan(api_key)
 
         # Calc pages
-        if count_until <= 100:
-                pages = 2
-        else:
-                pages = math.ceil(count_until / 100.0)+2
+        pages = math.ceil(count_until / 100.0)+1
 
         print('=> Downloading '+str(count_until)+' results on '+str(pages-1)+' pages\n')
 
@@ -116,8 +113,8 @@ def StartShodanSearch(api_key, count_until):
                 
         print('=> Succesfull for '+str(len(matches))+' results\n')
                 
-        for index, line in enumerate(matches):
-                print(str(index)+'    '+str(line['ip_str'])+'\n')
+        #for index, line in enumerate(matches):
+        #        print(str(index)+'    '+str(line['ip_str'])+'\n')
 
         # Start worker
         try:
