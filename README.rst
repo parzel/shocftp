@@ -1,16 +1,11 @@
-shocftp v0.2
+crawlit v0.3
 ========================================================
 
-Crawl (anonymous) accessible FTP server for files
+Crawl (anonymous) accessible FTP server for files in Python3
 
-Features
---------
-
-- Use builtin Shodan search
+- Integrated Shodan search
 - Multiprocessing
-- Define own user/password combination
-- Define level of crawling depth
-- Auto generate download links for files
+- Logging
 
 Installation
 ------------
@@ -19,10 +14,10 @@ Install the shodan library
 
 .. code-block:: bash
 
-    $ sudo python3 -m pip install shodan
+    $ pip3 install -r requirements.txt --user
 
 You are ready to go
 
 .. code-block:: bash
 
-    $ ./crawler.py --help
+    $ ./main.py --help
